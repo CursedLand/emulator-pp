@@ -88,7 +88,7 @@ namespace emulator_pp {
 
             var globalType = _module.GetOrCreateModuleType();
 
-            var initializeBuffer = globalType.Methods.FirstOrDefault(method => !method.Signature!.ReturnsValue);
+            var initializeBuffer = globalType.Methods.FirstOrDefault(method => !method.IsConstructor && !method.Signature!.ReturnsValue);
             var decodeBuffer = globalType.Methods.FirstOrDefault(method => method.GenericParameters.Any());
             var decompressBuffer = globalType.Methods.FirstOrDefault(method => method.Signature!.ReturnType is SzArrayTypeSignature);
 
