@@ -135,7 +135,9 @@ namespace emulator_pp {
             public const uint kTopValue = (1 << 24);
             public uint Code;
             public uint Range;
+#pragma warning disable CS8618
             public Stream Stream;
+#pragma warning restore CS8618
 
             public void Init(Stream stream) {
                 // Stream.Init(stream);
@@ -148,7 +150,9 @@ namespace emulator_pp {
             }
 
             public void ReleaseStream() {
+#pragma warning disable CS8625
                 Stream = null;
+#pragma warning restore CS8625
             }
 
             public void Normalize() {
@@ -428,7 +432,9 @@ namespace emulator_pp {
             }
 
             class LiteralDecoder {
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
                 Decoder2[] m_Coders;
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
                 int m_NumPosBits;
                 int m_NumPrevBits;
                 uint m_PosMask;
@@ -504,9 +510,13 @@ namespace emulator_pp {
         }
 
         class OutWindow {
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
             byte[] _buffer;
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
             uint _pos;
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
             Stream _stream;
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
             uint _streamPos;
             uint _windowSize;
 
@@ -530,7 +540,9 @@ namespace emulator_pp {
 
             public void ReleaseStream() {
                 Flush();
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
                 _stream = null;
+#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
                 Buffer.BlockCopy(new byte[_buffer.Length], 0, _buffer, 0, _buffer.Length);
             }
 

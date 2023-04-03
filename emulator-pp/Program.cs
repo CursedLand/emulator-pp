@@ -162,12 +162,12 @@ namespace emulator_pp {
 
         private static InvocationResult GetUtf8String(CilExecutionContext context, IMethodDescriptor method, IList<BitVector> arguments) {
             // patchs UTF8Encoding::GetString(uint8[],int32,int32)
-            var span = _virtualMachine.StaticFields.GetFieldSpan(_module.GetModuleType().Fields.First());
-            _virtualMachine.ObjectMarshaller.ToObject<byte[]>(span);
+            // var span = _virtualMachine.StaticFields.GetFieldSpan(_module.GetModuleType().Fields.First());
+            // _virtualMachine.ObjectMarshaller.ToObject<byte[]>(span);
             var buffer = _virtualMachine.ObjectMarshaller.ToObject<byte[]>(arguments[1]);
             var index = _virtualMachine.ObjectMarshaller.ToObject<int>(arguments[2]);
             var count = _virtualMachine.ObjectMarshaller.ToObject<int>(arguments[3]);
-            return InvocationResult.StepOver(_virtualMachine.ObjectMarshaller.ToBitVector(Encoding.UTF8.GetString(buffer, index, count)));
+            return InvocationResult.StepOver(_virtualMachine.ObjectMarshaller.ToBitVector(Encoding.UTF8.GetString(buffer!, index, count)));
         }
     }
 }
