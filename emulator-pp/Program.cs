@@ -5,6 +5,8 @@ using AsmResolver.PE.DotNet.Cil;
 using Echo.Memory;
 using Echo.Platforms.AsmResolver.Emulation;
 using Echo.Platforms.AsmResolver.Emulation.Dispatch;
+using Echo.Platforms.AsmResolver.Emulation.Dispatch.ObjectModel;
+using Echo.Platforms.AsmResolver.Emulation.Dispatch.Variables;
 using Echo.Platforms.AsmResolver.Emulation.Invocation;
 using System.Reflection;
 using System.Text;
@@ -13,6 +15,7 @@ namespace emulator_pp {
     internal static class Program {
 
 #pragma warning disable CS8618
+        private static FieldDefinition _bufferField;
         private static ModuleDefinition _module;
         private static CilVirtualMachine _virtualMachine;
 #pragma warning restore CS8618
@@ -31,6 +34,8 @@ namespace emulator_pp {
             InitialRuntime();
 
             DecodeConstants();
+
+            _module.Write(args[0].Insert(args[0].Length - 4, "-decoded"));
         }
 
         private static void DecodeConstants() {
@@ -61,14 +66,13 @@ namespace emulator_pp {
 
                     if (decoderInstruction.OpCode.Code is not CilCode.Call && decoderInstruction.Operand is not MethodSpecification)
                         continue;
-
+                    
                     var decoderMethod = (MethodSpecification)decoderInstruction.Operand!;
 
                     var result = _virtualMachine.Call(decoderMethod, new object[] { instruction.GetLdcI4Constant() });
-
                     if (result is null)
                         continue;
-
+                    
                     var stringHandle = result.AsObjectHandle(_virtualMachine);
 
                     var decodedConstant = _virtualMachine.ObjectMarshaller.ToObject<string>(stringHandle);
@@ -91,10 +95,13 @@ namespace emulator_pp {
             var initializeBuffer = globalType.Methods.FirstOrDefault(method => !method.IsConstructor && !method.Signature!.ReturnsValue);
             var decodeBuffer = globalType.Methods.FirstOrDefault(method => method.GenericParameters.Any());
             var decompressBuffer = globalType.Methods.FirstOrDefault(method => method.Signature!.ReturnType is SzArrayTypeSignature);
+            var fieldBuffer = globalType.Fields.FirstOrDefault(field => field.Signature?.FieldType is SzArrayTypeSignature szSignature && szSignature.FullName == typeof(byte[]).FullName);
 
-            if (initializeBuffer is null || decodeBuffer is null || decompressBuffer is null) {
+            if (initializeBuffer is null || decodeBuffer is null || decompressBuffer is null || fieldBuffer is null) {
                 throw new InvalidOperationException("Invalid confuser-ex sample.");
             }
+
+            _bufferField = fieldBuffer;
 
             var decodeBufferInvocations = new[] {
                 decodeBuffer.CilMethodBody!.Instructions.First(instruction => instruction.Operand is MemberReference member && member.Name == $"get_{nameof(Encoding.UTF8)}").Operand,
@@ -104,8 +111,7 @@ namespace emulator_pp {
             }.Select(member => (IMethodDescriptor)member!);
 
             var getEncodingString = (IMethodDescriptor)decodeBuffer.CilMethodBody!.Instructions.First(instruction => instruction.Operand is MemberReference member && member.Name == nameof(Encoding.GetString)).Operand!;
-
-            var cctor = _module.GetModuleConstructor()!;
+            var internString = (IMethodDescriptor)decodeBuffer.CilMethodBody!.Instructions.First(instruction => instruction.Operand is MemberReference member && member.Name == nameof(string.Intern)).Operand!;
 
             var runtimeHelpersArray = (IMethodDescriptor)initializeBuffer.CilMethodBody!.Instructions.First(i => i.OpCode.Code is CilCode.Call).Operand!;
 
@@ -113,18 +119,21 @@ namespace emulator_pp {
                 .Map(runtimeHelpersArray, InitializeArray)
                 .Map(decompressBuffer, LzmaDecompress)
                 .Map(getEncodingString, GetUtf8String)
+                .Map(internString, InternString)
                 .MapMany(decodeBufferInvocations, ReturnTrue)
                 .WithFallback(DefaultInvokers.ReturnUnknown);
 
             _virtualMachine.Invoker = invoker;
+
+            
 
             _virtualMachine.Call(initializeBuffer, Array.Empty<object>());
 
         }
 
         private static void CallvirtPatcher(object? sender, CilDispatchEventArgs arguments) {
-            // string stack = string.Join(", ", e.Context.CurrentFrame.EvaluationStack);
-            // Console.WriteLine($"{e.Instruction,-100} {{{stack}}}");
+            // string stack = string.Join(", ", arguments.Context.CurrentFrame.EvaluationStack);
+            // Console.WriteLine($"{arguments.Instruction,-100} {{{stack}}}");
 
             var argumentInstruction = arguments.Instruction;
 
@@ -162,12 +171,17 @@ namespace emulator_pp {
 
         private static InvocationResult GetUtf8String(CilExecutionContext context, IMethodDescriptor method, IList<BitVector> arguments) {
             // patchs UTF8Encoding::GetString(uint8[],int32,int32)
-            // var span = _virtualMachine.StaticFields.GetFieldSpan(_module.GetModuleType().Fields.First());
-            // _virtualMachine.ObjectMarshaller.ToObject<byte[]>(span);
-            var buffer = _virtualMachine.ObjectMarshaller.ToObject<byte[]>(arguments[1]);
+            var bufferFieldSpan = _virtualMachine.StaticFields.GetFieldSpan(_bufferField);
+            var buffer = _virtualMachine.ObjectMarshaller.ToObject<byte[]>(bufferFieldSpan);
             var index = _virtualMachine.ObjectMarshaller.ToObject<int>(arguments[2]);
             var count = _virtualMachine.ObjectMarshaller.ToObject<int>(arguments[3]);
             return InvocationResult.StepOver(_virtualMachine.ObjectMarshaller.ToBitVector(Encoding.UTF8.GetString(buffer!, index, count)));
+        }
+
+        private static InvocationResult InternString(CilExecutionContext context, IMethodDescriptor method, IList<BitVector> arguments) {
+            // patchs string::Intern(string)
+            var str = _virtualMachine.ObjectMarshaller.ToObject<string>(arguments[0]);
+            return InvocationResult.StepOver(_virtualMachine.ObjectMarshaller.ToBitVector(string.Intern(str!)));
         }
     }
 }
